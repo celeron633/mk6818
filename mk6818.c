@@ -235,9 +235,9 @@ int main(int argc, char *argv[])
     //printf("%s", to_readable_msg(msg_forum, sizeof(msg_forum)));
     //printf("%s", to_readable_msg(msg_tel, sizeof(msg_tel)));
 
-	if(argc != 5)
+	if(argc < 5)
 	{
-		printf("Usage: mk6818 <destination> <nsih> <2ndboot> <bootloader> \n");
+		printf("Usage: mk6818 <destination> <nsih> <2ndboot> <bootloader> [is64bit]\n");
 		return -1;
 	}
 
@@ -277,6 +277,8 @@ int main(int argc, char *argv[])
 	/* fix 2ndboot nsih */
 	bi = (struct boot_info_t *)(&buffer[(SECBOOT_NSIH_POSITION - 1) * BLKSIZE]);
 	/* ... */
+	printf("2ndboot loadaddr: [0x%08X]\n", bi->loadaddr);
+	printf("2ndboot launchaddr: [0x%08X]\n", bi->launchaddr);
 
 	/* bootloader nsih */
 	memcpy(&buffer[(BOOTLOADER_NSIH_POSITION - 1) * BLKSIZE], &nsih[0], 512);
@@ -309,8 +311,10 @@ int main(int argc, char *argv[])
 	bi = (struct boot_info_t *)(&buffer[(BOOTLOADER_NSIH_POSITION - 1) * BLKSIZE]);
 	bi->deviceaddr = 0x00008000;
 	bi->loadsize = ((filelen + 512 + 512) >> 9) << 9;
-	bi->loadaddr = 0x43C00000;
+	bi->loadaddr = 0x43bffe00;
 	bi->launchaddr = 0x43C00000;
+	printf("tbi loadaddr: [0x%08X]\n", bi->loadaddr);
+	printf("tbi launchaddr: [0x%08X]\n", bi->launchaddr);
 
 	/* destination */
 	fp = fopen(argv[1], "w+b");
