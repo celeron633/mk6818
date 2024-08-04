@@ -237,7 +237,7 @@ int main(int argc, char *argv[])
 
 	if(argc < 5)
 	{
-		printf("Usage: mk6818 <destination> <nsih> <2ndboot> <bootloader> [is64bit]\n");
+		printf("Usage: mk6818 <destination> <nsih> <2ndboot> <bootloader> [is64BitMode]\n");
 		return -1;
 	}
 
@@ -307,12 +307,30 @@ int main(int argc, char *argv[])
 	}
 	fclose(fp);
 
+	int is64BitMode = 1;
+	if (argc == 6) {
+		is64BitMode = atoi(argv[5]);
+	}
+	printf("is64BitMode: [%d]\n", is64BitMode);
+
 	/* fix bootloader nsih */
 	bi = (struct boot_info_t *)(&buffer[(BOOTLOADER_NSIH_POSITION - 1) * BLKSIZE]);
 	bi->deviceaddr = 0x00008000;
 	bi->loadsize = ((filelen + 512 + 512) >> 9) << 9;
-	bi->loadaddr = 0x43bffe00;
-	bi->launchaddr = 0x43C00000;
+	if (is64BitMode > 0) {
+		// once cpu run in aarch64 mode, you can not jump to reset vector address anymore
+		// will cause a ARM exception
+		// the first instruction will no longer be 'MOV PC, ResetV'
+		// we need to jump to the first address of u-boot
+		bi->loadaddr = 0x43bffe00;
+		bi->launchaddr = 0x43C00000;
+	} else {
+		// in arrch32 mode, this won't be a issue, jump to start of vector
+		// and it will jump to startaddr of u-boot by set the value of pc
+		bi->loadaddr = 0x43C00000;
+		bi->launchaddr = 0x43C00000;
+	}
+	
 	printf("tbi loadaddr: [0x%08X]\n", bi->loadaddr);
 	printf("tbi launchaddr: [0x%08X]\n", bi->launchaddr);
 
