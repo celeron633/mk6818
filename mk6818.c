@@ -10,6 +10,8 @@
 #define BOOTLOADER_NSIH_POSITION	(64)
 #define BOOTLOADER_POSITION			(65)
 
+#define MAX_BUFFER_SIZE				(32 * 1024 * 1024)
+
 struct nand_bootinfo_t
 {
 	uint8_t	addrstep;
@@ -97,6 +99,10 @@ struct boot_info_t
 	uint32_t stub[(0x1F8 - 0x1A8) / 4];	// 0x1AC ~ 0x1F8
 	uint32_t signature;					// 0x1FC "NSIH"
 };
+
+int write_buf_to_file(char *buf, size_t len, const char *fname);
+void write_nsih2_with_uboot(const char *raw_buffer, size_t buffer_len, size_t uboot_file_len, const char *out_file_name);
+void write_nsih1_with_bl1(const char *raw_buffer, size_t buffer_len, size_t bl1_file_len, const char *out_file_name);
 
 static int process_nsih(const char * filename, unsigned char * outdata)
 {
@@ -231,6 +237,11 @@ int main(int argc, char *argv[])
 	int length, reallen;
 	int nbytes, filelen;
 
+	char nsih1_with_bl1_fname[64];
+	char nsih2_with_uboot_fname[64];
+	sprintf(nsih1_with_bl1_fname, "nsih1_with_bl1_%s", argv[1]);
+	sprintf(nsih2_with_uboot_fname, "nsih2_with_uboot_%s", argv[1]);
+
 	//printf("%s", to_readable_msg(msg_copyright, sizeof(msg_copyright)));
     //printf("%s", to_readable_msg(msg_forum, sizeof(msg_forum)));
     //printf("%s", to_readable_msg(msg_tel, sizeof(msg_tel)));
@@ -244,9 +255,8 @@ int main(int argc, char *argv[])
 	if(process_nsih(argv[2], &nsih[0]) != 512)
 		return -1;
 
-	length = 32 * 1024 * 1024;
-	buffer = malloc(length);
-	memset(buffer, 0, length);
+	buffer = malloc(MAX_BUFFER_SIZE);
+	memset(buffer, 0, MAX_BUFFER_SIZE);
 
 	/* 2ndboot nsih */
 	memcpy(&buffer[(SECBOOT_NSIH_POSITION - 1) * BLKSIZE], &nsih[0], 512);
@@ -262,6 +272,7 @@ int main(int argc, char *argv[])
 
 	fseek(fp, 0L, SEEK_END);
 	filelen = ftell(fp);
+	int bl1_len = filelen;
 	fseek(fp, 0L, SEEK_SET);
 
 	nbytes = fread(&buffer[(SECBOOT_POSITION - 1) * BLKSIZE], 1, filelen, fp);
@@ -294,6 +305,7 @@ int main(int argc, char *argv[])
 
 	fseek(fp, 0L, SEEK_END);
 	filelen = ftell(fp);
+	int uboot_len = filelen;
 	reallen = (BOOTLOADER_POSITION - 1) * BLKSIZE + filelen;
 	fseek(fp, 0L, SEEK_SET);
 
@@ -318,44 +330,91 @@ int main(int argc, char *argv[])
 	bi->deviceaddr = 0x00008000;
 	bi->loadsize = ((filelen + 512 + 512) >> 9) << 9;
 	if (is64BitMode > 0) {
-		// once cpu run in aarch64 mode, you can not jump to reset vector address anymore
-		// will cause a ARM exception
-		// the first instruction will no longer be 'MOV PC, ResetV'
-		// we need to jump to the first address of u-boot
+		/* once cpu run in aarch64 mode, you can not jump to reset vector address anymore
+		will cause a ARM exception
+		the first instruction will no longer be 'MOV PC, ResetV'
+		we need to jump to the first address of u-boot */
 		bi->loadaddr = 0x43bffe00;
 		bi->launchaddr = 0x43C00000;
 	} else {
-		// in arrch32 mode, this won't be a issue, jump to start of vector
-		// and it will jump to startaddr of u-boot by set the value of pc
+		/* in arrch32 mode, this won't be a issue, jump to start of vector
+		and it will jump to startaddr of u-boot by set the value of pc */
 		bi->loadaddr = 0x43C00000;
 		bi->launchaddr = 0x43C00000;
 	}
 	
-	printf("tbi loadaddr: [0x%08X]\n", bi->loadaddr);
-	printf("tbi launchaddr: [0x%08X]\n", bi->launchaddr);
+	printf("uboot loadaddr: [0x%08X]\n", bi->loadaddr);
+	printf("uboot launchaddr: [0x%08X]\n", bi->launchaddr);
 
-	/* destination */
-	fp = fopen(argv[1], "w+b");
+	// write nsih1 + bl1 part
+	write_nsih1_with_bl1(buffer, sizeof(buffer), bl1_len, nsih1_with_bl1_fname);
+
+	// write nsih2 + bl2(uboot) part
+	write_nsih2_with_uboot(buffer, sizeof(buffer), uboot_len, nsih2_with_uboot_fname);
+
+	// write nsih1 + bl1 + nsih2 + bl2 to file (ALL)
+	(void)write_buf_to_file(buffer, reallen, argv[1]);
+
+	printf("Generate destination file: [%s], [%s], [%s]\n", argv[1], nsih1_with_bl1_fname, nsih2_with_uboot_fname);
+	return 0;
+}
+
+int write_buf_to_file(char *buf, size_t len, const char *fname)
+{
+	printf("write buffer to file: [%s] begin!\n", fname);
+	FILE *fp = fopen(fname, "w+b");
 	if(fp == NULL)
 	{
-		printf("Destination file open error\n");
-		free(buffer);
+		printf("open file: [%s] error\n", fname);
 		return -1;
 	}
-
-	nbytes = fwrite(buffer, 1, reallen, fp);
-	if(nbytes != reallen)
+	int nbytes = fwrite(buf, 1, len, fp);
+	if(nbytes != len)
 	{
-		printf("Destination file write error\n");
-		free(buffer);
+		printf("write file: [%s] error\n", fname);
 		fclose(fp);
 		return -1;
 	}
-
-	free(buffer);
 	fclose(fp);
+	printf("write buffer to file: [%s] success!\n", fname);
+}
 
-	printf("Generate destination file: %s\n", argv[1]);
+void write_nsih2_with_uboot(const char *raw_buffer, size_t buffer_len, size_t uboot_file_len, const char *out_file_name)
+{
+	struct boot_info_t * bi;
+	int final_file_len = 0;
+	char *buffer = malloc(MAX_BUFFER_SIZE);
+	memset(buffer, 0, MAX_BUFFER_SIZE);
 
-	return 0;
+	printf("uboot_file_len: [%ld]\n", uboot_file_len);
+	memcpy(&buffer[(SECBOOT_NSIH_POSITION - 1) * BLKSIZE], &raw_buffer[(BOOTLOADER_NSIH_POSITION - 1) * BLKSIZE], 512);
+	memcpy(&buffer[(SECBOOT_POSITION - 1) * BLKSIZE], 		&raw_buffer[(BOOTLOADER_POSITION - 1) * BLKSIZE], uboot_file_len);
+	bi = (struct boot_info_t *)(&buffer[(SECBOOT_NSIH_POSITION - 1) * BLKSIZE]);
+	bi->loadsize = (uboot_file_len);
+
+	/* bl1 load u-boot with usb boot, do need to care the nsih header for u-boot anymore
+	so set the load address and the launch address the same */
+	bi->loadaddr = 0x43C00000;
+	bi->launchaddr = 0x43C00000;
+	final_file_len = (SECBOOT_POSITION - 1) * BLKSIZE + uboot_file_len;
+
+	(void)write_buf_to_file(buffer, final_file_len, out_file_name);
+	
+	free(buffer);
+}
+
+void write_nsih1_with_bl1(const char *raw_buffer, size_t buffer_len, size_t bl1_file_len, const char *out_file_name)
+{
+	struct boot_info_t * bi;
+	int final_file_len = 0;
+	char *buffer = malloc(MAX_BUFFER_SIZE);
+	memset(buffer, 0, MAX_BUFFER_SIZE);
+
+	printf("bl1_file_len: [%ld]\n", bl1_file_len);
+	memcpy(&buffer[(SECBOOT_NSIH_POSITION - 1) * BLKSIZE], 	&raw_buffer[(SECBOOT_NSIH_POSITION - 1) * BLKSIZE], 512);
+	memcpy(&buffer[(SECBOOT_POSITION - 1) * BLKSIZE], 		&raw_buffer[(SECBOOT_POSITION - 1) * BLKSIZE], bl1_file_len);
+	final_file_len = (SECBOOT_POSITION - 1) * BLKSIZE + bl1_file_len;
+
+	(void)write_buf_to_file(buffer, final_file_len, out_file_name);
+	free(buffer);
 }
