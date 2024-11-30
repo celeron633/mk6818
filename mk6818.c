@@ -206,28 +206,6 @@ static char * to_readable_msg(char * buf, int len)
     return msg;
 }
 
-/*
- * "Copyright(c) 2011-2014 http://www.9tripod.com\n"
- */
-char msg_copyright[] = { 0x67, 0x59, 0xdc, 0xcb, 0x2a, 0x4d, 0x51, 0xc4, 0xc6,
-		0x70, 0x47, 0x1f, 0x8c, 0x80, 0x68, 0x15, 0x07, 0x81, 0x80, 0x68, 0x15,
-		0x02, 0x8c, 0xda, 0x2c, 0x50, 0x46, 0x96, 0x9d, 0x77, 0x53, 0x41, 0xdb,
-		0x9c, 0x61, 0x50, 0x44, 0xc5, 0xc2, 0x37, 0x40, 0x18, 0xcf, 0xdd, 0x35,
-		0x2e, };
-
-/*
- * "Forum: http://xboot.org\n"
- */
-char msg_forum[] = { 0x62, 0x59, 0xde, 0xc7, 0x35, 0x1e, 0x16, 0xc4, 0xc6, 0x2c,
-		0x54, 0x0c, 0x83, 0x9d, 0x20, 0x46, 0x59, 0xc3, 0xc6, 0x76, 0x4b, 0x44,
-		0xcb, 0xb8, };
-
-/*
- * "Tel: 0755-33133436\n"
- */
-char msg_tel[] = { 0x70, 0x53, 0xc0, 0x88, 0x78, 0x14, 0x01, 0x99, 0x87, 0x75,
-		0x17, 0x05, 0x9d, 0x81, 0x6b, 0x10, 0x05, 0x9a, 0xb8, };
-
 int main(int argc, char *argv[])
 {
 	FILE * fp;
@@ -241,10 +219,6 @@ int main(int argc, char *argv[])
 	char nsih2_with_uboot_fname[64];
 	sprintf(nsih1_with_bl1_fname, "nsih1_with_bl1_%s", argv[1]);
 	sprintf(nsih2_with_uboot_fname, "nsih2_with_uboot_%s", argv[1]);
-
-	//printf("%s", to_readable_msg(msg_copyright, sizeof(msg_copyright)));
-    //printf("%s", to_readable_msg(msg_forum, sizeof(msg_forum)));
-    //printf("%s", to_readable_msg(msg_tel, sizeof(msg_tel)));
 
 	if(argc < 5)
 	{
@@ -379,6 +353,7 @@ int write_buf_to_file(char *buf, size_t len, const char *fname)
 	printf("write buffer to file: [%s] success!\n", fname);
 }
 
+// 这个函数写出来的文件适合usb启动
 void write_nsih2_with_uboot(const char *raw_buffer, size_t buffer_len, size_t uboot_file_len, const char *out_file_name)
 {
 	struct boot_info_t * bi;
@@ -403,6 +378,7 @@ void write_nsih2_with_uboot(const char *raw_buffer, size_t buffer_len, size_t ub
 	free(buffer);
 }
 
+// 带nsih的2ndboot, 可以用来调试usb启动
 void write_nsih1_with_bl1(const char *raw_buffer, size_t buffer_len, size_t bl1_file_len, const char *out_file_name)
 {
 	struct boot_info_t * bi;
