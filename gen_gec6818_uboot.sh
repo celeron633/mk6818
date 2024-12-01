@@ -1,6 +1,6 @@
 #!/bin/bash
 
-uboot_raw_bin_path="/home/dengxh/data/u-boot_nanopi3/u-boot.bin"
+uboot_raw_bin_path="/home/dengxh/data/u-boot_gec6818/u-boot.bin"
 out_file_name="boot.bin"
 nsih_name="drone-sd-64.txt"
 bl1_name="bl1-drone.bin"
