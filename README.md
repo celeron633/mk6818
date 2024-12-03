@@ -31,7 +31,16 @@ is64BitMode：0：32位模式；1：64位模式，可选参数，很重要，决
 
 **代码解析：**
 &nbsp;
-![img](img/1.png)
+```c
+#define BLKSIZE						(512)
+
+#define SECBOOT_NSIH_POSITION		(1)
+#define SECBOOT_POSITION			(2)
+#define BOOTLOADER_NSIH_POSITION	(64)
+#define BOOTLOADER_POSITION			(65)
+
+#define MAX_BUFFER_SIZE				(32 * 1024 * 1024)
+```
 
 首先定义的这个宏里面，描述了几个重要数据结构的位置，块大小为512字节，nsih1（代码叫做SECBOOT_NSIH）的位置是1扇区，bl1的位置从2扇区开始，到63扇区为止，64扇区为nsih2，65扇区开始为uboot的代码；我们的目标就是构造一片内存，模拟出上面的场景，写入对应数据，最后写成文件。
 
