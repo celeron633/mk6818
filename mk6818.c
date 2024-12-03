@@ -3,11 +3,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+// 块大小
 #define BLKSIZE						(512)
 
+// NSIH1位置
 #define SECBOOT_NSIH_POSITION		(1)
+// BL1位置
 #define SECBOOT_POSITION			(2)
+// NSIH2位置
 #define BOOTLOADER_NSIH_POSITION	(64)
+// UBOOT(bootloader)位置
 #define BOOTLOADER_POSITION			(65)
 
 #define MAX_BUFFER_SIZE				(32 * 1024 * 1024)
@@ -215,7 +220,9 @@ int main(int argc, char *argv[])
 	int length, reallen;
 	int nbytes, filelen;
 
+	// 带nsih1的bl1文件名
 	char nsih1_with_bl1_fname[64];
+	// 带nsih2的uboot的文件名
 	char nsih2_with_uboot_fname[64];
 	sprintf(nsih1_with_bl1_fname, "nsih1_with_bl1_%s", argv[1]);
 	sprintf(nsih2_with_uboot_fname, "nsih2_with_uboot_%s", argv[1]);
@@ -226,13 +233,15 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
+	// 处理nsih txt文本到二进制
 	if(process_nsih(argv[2], &nsih[0]) != 512)
 		return -1;
 
+	// 分配模拟内存空间地址
 	buffer = malloc(MAX_BUFFER_SIZE);
 	memset(buffer, 0, MAX_BUFFER_SIZE);
 
-	/* 2ndboot nsih */
+	// 把nsih拷贝到nsih1对应的位置
 	memcpy(&buffer[(SECBOOT_NSIH_POSITION - 1) * BLKSIZE], &nsih[0], 512);
 
 	/* 2ndboot */
@@ -249,6 +258,7 @@ int main(int argc, char *argv[])
 	int bl1_len = filelen;
 	fseek(fp, 0L, SEEK_SET);
 
+	// 读取bl1到对应内存位置
 	nbytes = fread(&buffer[(SECBOOT_POSITION - 1) * BLKSIZE], 1, filelen, fp);
 	if(nbytes != filelen)
 	{
@@ -260,12 +270,14 @@ int main(int argc, char *argv[])
 	fclose(fp);
 
 	/* fix 2ndboot nsih */
+	// 实际没有fix, 显示nsih1里面的loadaddr和launchaddr
 	bi = (struct boot_info_t *)(&buffer[(SECBOOT_NSIH_POSITION - 1) * BLKSIZE]);
 	/* ... */
 	printf("2ndboot loadaddr: [0x%08X]\n", bi->loadaddr);
 	printf("2ndboot launchaddr: [0x%08X]\n", bi->launchaddr);
 
 	/* bootloader nsih */
+	// 拷贝nsih到nsih2对应位置
 	memcpy(&buffer[(BOOTLOADER_NSIH_POSITION - 1) * BLKSIZE], &nsih[0], 512);
 
 	/* bootloader */
@@ -283,6 +295,7 @@ int main(int argc, char *argv[])
 	reallen = (BOOTLOADER_POSITION - 1) * BLKSIZE + filelen;
 	fseek(fp, 0L, SEEK_SET);
 
+	// 读取uboot到对应内存位置
 	nbytes = fread(&buffer[(BOOTLOADER_POSITION - 1) * BLKSIZE], 1, filelen, fp);
 	if(nbytes != filelen)
 	{
@@ -300,6 +313,7 @@ int main(int argc, char *argv[])
 	printf("is64BitMode: [%d]\n", is64BitMode);
 
 	/* fix bootloader nsih */
+	// 处理nsih2里面的loadaddr和launchaddr, 这个比较重要, 涉及到bl1怎么读取加载uboot
 	bi = (struct boot_info_t *)(&buffer[(BOOTLOADER_NSIH_POSITION - 1) * BLKSIZE]);
 	bi->deviceaddr = 0x00008000;
 	bi->loadsize = ((filelen + 512 + 512) >> 9) << 9;
@@ -308,6 +322,7 @@ int main(int argc, char *argv[])
 		will cause a ARM exception
 		the first instruction will no longer be 'MOV PC, ResetV'
 		we need to jump to the first address of u-boot */
+		// 64位不要再次执行vector代码
 		bi->loadaddr = 0x43bffe00;
 		bi->launchaddr = 0x43C00000;
 	} else {
@@ -320,6 +335,7 @@ int main(int argc, char *argv[])
 	printf("uboot loadaddr: [0x%08X]\n", bi->loadaddr);
 	printf("uboot launchaddr: [0x%08X]\n", bi->launchaddr);
 
+	// 写文件逻辑
 	// write nsih1 + bl1 part
 	write_nsih1_with_bl1(buffer, sizeof(buffer), bl1_len, nsih1_with_bl1_fname);
 
