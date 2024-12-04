@@ -20,6 +20,18 @@ is64BitMode：0：32位模式；1：64位模式，可选参数，很重要，决
 
 &nbsp;
 
+**写卡方法：**
+
+dd if=destination.bin of=sd卡或者mmc根设备路径 bs=512 seek=1
+
+of写sd卡根设备比如sdb，不要写到分区比如sdb1；
+
+destination.bin为mk6818生成的目标启动文件；
+
+seek=1跳过0扇区，从1扇区开始写。
+
+&nbsp;
+
 **s5p6818启动流程：**
 
 1. 上电后芯片内部bootrom启动，按外围配置电阻进行不同模式的启动，GEC6818使用了默认的配置，先启动SD卡0，启动失败再启动EMMC，EMMC启动失败进入USB下载模式，使用USB过来的NSIH和bl1进行启动。
